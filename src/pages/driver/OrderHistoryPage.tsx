@@ -55,7 +55,7 @@ const STATUS_CONFIG: Record<OrderStatus, { variant: 'success' | 'info' | 'warnin
 export default function OrderHistoryPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { orders, loadOrders, getDriverOrders, submitRating, submitDispute, loading } = useOrderStore();
+  const { loadOrders, getDriverOrders, submitRating, submitDispute, loading } = useOrderStore();
   const { getParkingById } = useParkingStore();
   const { user } = useAuthStore();
 
@@ -84,17 +84,13 @@ export default function OrderHistoryPage() {
     setSearchParams(params, { replace: true });
   }, [activeTab, setSearchParams]);
 
-  /** 获取当前用户的订单列表 */
+  /** 获取当前用户的订单列表 - 只按当前账号筛选，不 fallback 到全局订单 */
   const userOrders = useMemo(() => {
-    let list: Order[] = [];
     if (user) {
-      list = getDriverOrders(user.id);
+      return getDriverOrders(user.id);
     }
-    if (list.length === 0) {
-      list = orders;
-    }
-    return list;
-  }, [user, getDriverOrders, orders]);
+    return [];
+  }, [user, getDriverOrders]);
 
   /** 筛选后的订单 */
   const filteredOrders = useMemo(() => {
@@ -345,7 +341,7 @@ export default function OrderHistoryPage() {
                               <Button
                                 variant="primary"
                                 size="sm"
-                                onClick={() => navigate('/driver/order/active')}
+                                onClick={() => navigate('/order/active')}
                               >
                                 查看进行中
                               </Button>

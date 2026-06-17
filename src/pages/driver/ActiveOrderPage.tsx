@@ -51,6 +51,8 @@ export default function ActiveOrderPage() {
   /** 扫码入场状态 */
   const [scanStatus, setScanStatus] = useState<'scanning' | 'success' | 'error'>('scanning');
   const [scanErrorMsg, setScanErrorMsg] = useState('');
+  /** 手动输入的入场码 */
+  const [manualEntryCode, setManualEntryCode] = useState('');
 
   /** 定时器引用 */
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -60,21 +62,17 @@ export default function ActiveOrderPage() {
     loadOrders();
   }, [loadOrders]);
 
-  /** 获取进行中订单 */
+  /** 获取进行中订单：仅按当前登录账号筛选，不 fallback 到别人的订单 */
   useEffect(() => {
     let found: Order | null = null;
-    if (activeOrder) {
+    if (activeOrder && user && activeOrder.driverId === user.id) {
       found = activeOrder;
     } else if (user) {
       const driverOrders = getDriverOrders(user.id);
       found = driverOrders.find(o => o.status === 'active' || o.status === 'paid') || null;
     }
-    /** 如果没有找到，从mock数据中找一个进行中的订单（用于演示） */
-    if (!found) {
-      found = orders.find(o => o.status === 'paid' || o.status === 'active') || null;
-    }
     setOrder(found);
-  }, [activeOrder, user, getDriverOrders, orders]);
+  }, [activeOrder, user, getDriverOrders]);
 
   /** 定时刷新时间（每秒） */
   useEffect(() => {
@@ -156,7 +154,7 @@ export default function ActiveOrderPage() {
   const handleExit = async () => {
     if (!order) return;
     await exitParking(order.id);
-    navigate('/driver/orders?status=completed');
+    navigate('/orders?status=completed');
   };
 
   /** 如果没有进行中订单 */
@@ -190,7 +188,7 @@ export default function ActiveOrderPage() {
       <div className="container mx-auto px-4 py-4">
         {/* 返回 */}
         <button
-          onClick={() => navigate('/driver/orders')}
+          onClick={() => navigate('/orders')}
           className="flex items-center gap-2 text-slate-600 hover:text-brand-600 transition-colors mb-6"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -667,8 +665,8 @@ export default function ActiveOrderPage() {
                       <Camera className="w-8 h-8 text-white" />
                     </div>
                     <h3 className="text-xl font-bold text-slate-900 mb-2">扫码开门</h3>
-                    <p className="text-sm text-slate-500 mb-6">
-                      将摄像头对准闸机二维码，或对准闸机上的二维码扫描区
+                    <p className="text-sm text-slate-500 mb-4">
+                      将摄像头对准闸机二维码，或在下方输入6位入场验证码
                     </p>
 
                     <div className="aspect-square max-w-xs mx-auto rounded-2xl bg-slate-100 flex items-center justify-center mb-6 relative overflow-hidden">
@@ -677,10 +675,28 @@ export default function ActiveOrderPage() {
                       <Camera className="w-16 h-16 text-slate-400" />
                     </div>
 
+                    <div className="mb-5">
+                      <label className="block text-sm text-slate-600 font-medium mb-2 text-left">
+                        或手动输入入场码（输入正确/错误码可模拟两种情况）
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        placeholder="请输入6位入场码，如 123456"
+                        value={manualEntryCode}
+                        onChange={(e) => setManualEntryCode(e.target.value.replace(/\D/g, ''))}
+                        className="w-full px-4 py-3 text-2xl font-mono font-bold tracking-widest text-center rounded-2xl border-2 border-slate-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/20 outline-none transition-all"
+                      />
+                      <p className="text-xs text-slate-400 mt-2 text-left">
+                        提示：当前订单正确入场码为 <span className="font-mono font-bold text-brand-600">{order.entryCode}</span>
+                      </p>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3">
                       <Button variant="ghost" size="lg" onClick={() => {
                         setShowScanModal(false);
                         setScanStatus('scanning');
+                        setManualEntryCode('');
                       }}>
                         取消
                       </Button>
@@ -691,18 +707,24 @@ export default function ActiveOrderPage() {
                         loading={loading}
                         onClick={async () => {
                           if (!order) return;
-                          const success = await enterParking(order.id, order.entryCode);
+                          const codeToValidate = manualEntryCode || order.entryCode;
+                          const success = await enterParking(order.id, codeToValidate);
                           if (success) {
                             setScanStatus('success');
                             const updated = orderStoreGet().orders.find(o => o.id === order.id) || null;
                             setOrder(updated);
+                            setManualEntryCode('');
                           } else {
-                            setScanErrorMsg('入场码不匹配，请确认闸机信息后重试');
+                            setScanErrorMsg(
+                              manualEntryCode
+                                ? `入场码"${manualEntryCode}"校验失败，订单仍处于待入场状态`
+                                : '入场码不匹配，请确认闸机信息后重试'
+                            );
                             setScanStatus('error');
                           }
                         }}
                       >
-                        模拟扫码
+                        {manualEntryCode ? '提交校验' : '模拟扫码'}
                       </Button>
                     </div>
                   </>

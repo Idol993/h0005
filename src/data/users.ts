@@ -1,5 +1,46 @@
 import type { User } from '../types';
 import { UserRole } from '../types';
+import { getStorage, setStorage } from '../utils/storage';
+
+const USERS_PATCH_KEY = 'parking_app_users_patch';
+
+interface UserPatch {
+  id?: string;
+  banned?: boolean;
+  violations?: number;
+  verified?: boolean;
+  realName?: string;
+  idCard?: string;
+}
+
+function loadUsersPatch(): Record<string, UserPatch> {
+  return getStorage<Record<string, UserPatch>>(USERS_PATCH_KEY, {});
+}
+
+function saveUsersPatch(patch: Record<string, UserPatch>) {
+  setStorage(USERS_PATCH_KEY, patch);
+}
+
+export function applyUserPatch(user: User): User {
+  const patch = loadUsersPatch()[user.id];
+  if (!patch) return user;
+  return { ...user, ...patch };
+}
+
+/**
+ * 全局修改某个用户属性（并持久化）
+ */
+export function patchUser(id: string, changes: UserPatch): void {
+  const allPatch = loadUsersPatch();
+  allPatch[id] = { ...(allPatch[id] || {}), ...changes };
+  saveUsersPatch(allPatch);
+
+  /** 同步修改 users 数组中的引用，让内存中的查询也立即生效 */
+  const idx = users.findIndex((u) => u.id === id);
+  if (idx >= 0) {
+    users[idx] = { ...users[idx], ...changes };
+  }
+}
 
 /**
  * 驾驶员用户数据（5人）
@@ -198,42 +239,46 @@ const admins: User[] = [
 /**
  * 全部用户数据
  */
-export const users: User[] = [...drivers, ...owners, ...admins];
+export const users: User[] = [...drivers, ...owners, ...admins].map(applyUserPatch);
 
 /**
  * 驾驶员用户列表
  */
-export const driverUsers: User[] = drivers;
+export const driverUsers: User[] = users.filter(u => u.role === UserRole.DRIVER);
 
 /**
  * 业主用户列表
  */
-export const ownerUsers: User[] = owners;
+export const ownerUsers: User[] = users.filter(u => u.role === UserRole.OWNER);
 
 /**
  * 管理员用户列表
  */
-export const adminUsers: User[] = admins;
+export const adminUsers: User[] = users.filter(u => u.role === UserRole.ADMIN);
 
 /**
  * 根据ID查找用户
  */
 export function findUserById(id: string): User | undefined {
-  return users.find((u) => u.id === id);
+  const found = users.find((u) => u.id === id);
+  if (!found) return undefined;
+  return applyUserPatch(found);
 }
 
 /**
  * 根据手机号查找用户
  */
 export function findUserByPhone(phone: string): User | undefined {
-  return users.find((u) => u.phone === phone);
+  const found = users.find((u) => u.phone === phone);
+  if (!found) return undefined;
+  return applyUserPatch(found);
 }
 
 /**
  * 获取业主名称（用于展示）
  */
 export function getOwnerName(ownerId: string): string {
-  const owner = users.find((u) => u.id === ownerId);
+  const owner = findUserById(ownerId);
   return owner ? owner.nickname : '未知业主';
 }
 
@@ -241,6 +286,6 @@ export function getOwnerName(ownerId: string): string {
  * 获取驾驶员名称（用于展示）
  */
 export function getDriverName(driverId: string): string {
-  const driver = users.find((u) => u.id === driverId);
+  const driver = findUserById(driverId);
   return driver ? driver.nickname : '未知用户';
 }

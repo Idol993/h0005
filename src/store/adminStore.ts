@@ -15,8 +15,21 @@ import {
   withdrawalRecords as initialWithdrawals,
   dashboardStats as initialStats,
 } from '../data/adminData';
-import { users, findUserById } from '../data/users';
+import { findUserById, patchUser } from '../data/users';
 import { generateId } from '../utils/format';
+import { getStorage, setStorage } from '../utils/storage';
+
+const VIOLATIONS_KEY = 'parking_app_violations';
+
+function loadPersistedViolations(): ViolationRecord[] {
+  const saved = getStorage<ViolationRecord[] | null>(VIOLATIONS_KEY, null);
+  if (saved && saved.length > 0) return saved;
+  return [...initialViolations];
+}
+
+function persistViolations(list: ViolationRecord[]) {
+  setStorage(VIOLATIONS_KEY, list);
+}
 
 interface AddViolationParams {
   userId: string;
@@ -49,7 +62,7 @@ interface AdminState {
 }
 
 export const useAdminStore = create<AdminState>((set, get) => ({
-  violations: [...initialViolations],
+  violations: loadPersistedViolations(),
   disputes: [...initialDisputes],
   withdrawals: [...initialWithdrawals],
   dashboardStats: { ...initialStats },
@@ -59,7 +72,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
     set({ loading: true });
     await new Promise((resolve) => setTimeout(resolve, 300));
     set({
-      violations: [...initialViolations],
+      violations: loadPersistedViolations(),
       disputes: [...initialDisputes],
       withdrawals: [...initialWithdrawals],
       dashboardStats: { ...initialStats },
@@ -106,26 +119,22 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       const existingFakeCount = get().violations.filter(
         (v) => v.userId === params.userId && v.type === 'fake_listing'
       ).length;
-      if (existingFakeCount + 1 >= 3) {
+      const newCount = existingFakeCount + 1;
+      if (newCount >= 3) {
         autoBanned = true;
-        const targetUser = findUserById(params.userId);
-        if (targetUser) {
-          targetUser.banned = true;
-          targetUser.violations = existingFakeCount + 1;
-        }
+        patchUser(params.userId, { banned: true, violations: newCount });
         const { useAuthStore } = await import('./authStore');
         const currentUser = useAuthStore.getState().user;
         if (currentUser && currentUser.id === params.userId) {
-          useAuthStore.getState().updateUser({ banned: true, violations: existingFakeCount + 1 });
+          useAuthStore.getState().updateUser({ banned: true, violations: newCount });
         }
+      } else {
+        patchUser(params.userId, { violations: newCount });
       }
     }
 
     if (params.penalty === 'ban') {
-      const targetUser = findUserById(params.userId);
-      if (targetUser) {
-        targetUser.banned = true;
-      }
+      patchUser(params.userId, { banned: true });
       const { useAuthStore } = await import('./authStore');
       const currentUser = useAuthStore.getState().user;
       if (currentUser && currentUser.id === params.userId) {
@@ -133,8 +142,11 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       }
     }
 
+    const updatedViolations = [newViolation, ...get().violations];
+    persistViolations(updatedViolations);
+
     set((state) => ({
-      violations: [newViolation, ...state.violations],
+      violations: updatedViolations,
       loading: false,
     }));
 
@@ -185,9 +197,14 @@ export const useAdminStore = create<AdminState>((set, get) => ({
     set({ loading: true });
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    const user = findUserById(userId);
-    if (user) {
-      user.banned = banned;
+    patchUser(userId, { banned });
+    const { useAuthStore } = await import('./authStore');
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser && currentUser.id === userId) {
+      useAuthStore.getState().updateUser({ banned });
+      if (banned) {
+        useAuthStore.getState().logout();
+      }
     }
 
     set({ loading: false });

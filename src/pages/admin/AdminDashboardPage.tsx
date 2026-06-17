@@ -38,9 +38,11 @@ import { useAdminStore } from '@/store/adminStore';
 import { useParkingStore } from '@/store/parkingStore';
 import { useOrderStore } from '@/store/orderStore';
 import { parkings } from '@/data/parkings';
-import { users, findUserById, getOwnerName } from '@/data/users';
-import { formatCurrency, formatDate, formatDateTime } from '@/utils/format';
+import { users, findUserById, getOwnerName, getDriverName } from '@/data/users';
+import { formatCurrency, formatDate, formatDateTime, formatDuration } from '@/utils/format';
+import { calculateOvertimeFee } from '@/utils/time';
 import { cn } from '@/lib/utils';
+import type { Order } from '@/types';
 
 /**
  * 管理员数据看板页面
@@ -55,8 +57,7 @@ export default function AdminDashboardPage() {
   const [peakDays, setPeakDays] = useState<7>(7);
   /** 排行榜当前Tab */
   const [rankTab, setRankTab] = useState<'owner' | 'district' | 'parking'>('owner');
-  /** 实时动态模拟滚动 */
-  const [notifications, setNotifications] = useState<Array<{ id: string; type: 'order' | 'parking' | 'alert' | 'dispute'; text: string; time: string }>>([]);
+  /** 实时动态通知由 useMemo 从真实订单生成，不再需要 useState */
 
   /** ========== 核心指标计算 ========== */
   const metrics = useMemo(() => {
@@ -163,20 +164,99 @@ export default function AdminDashboardPage() {
     return { ownerRank, districtRank, parkingRank };
   }, [parkingList]);
 
-  /** ========== 实时动态数据 ========== */
-  useEffect(() => {
-    const initialNotifications = [
-      { id: 'n1', type: 'order' as const, text: '新订单：张小明 预订了 国贸CBD地下固定车位', time: '刚刚' },
-      { id: 'n2', type: 'parking' as const, text: '新车位发布：静安寺商务楼地下车位 待审核', time: '2分钟前' },
-      { id: 'n3', type: 'alert' as const, text: '超时警报：订单o20250617003 已超时45分钟', time: '5分钟前' },
-      { id: 'n4', type: 'dispute' as const, text: '纠纷提交：李小红 发起多收费争议工单', time: '8分钟前' },
-      { id: 'n5', type: 'order' as const, text: '新订单：王小虎 预订了 陆家嘴金融中心车位', time: '12分钟前' },
-      { id: 'n6', type: 'parking' as const, text: '新车位发布：深圳南山科技园车位 待审核', time: '15分钟前' },
-      { id: 'n7', type: 'alert' as const, text: '超时警报：订单o20250617001 已超时1小时20分', time: '20分钟前' },
-      { id: 'n8', type: 'dispute' as const, text: '纠纷提交：赵小伟 发起车位质量问题工单', time: '25分钟前' },
-    ];
-    setNotifications(initialNotifications);
-  }, []);
+  /** ========== 实时动态数据：基于真实订单 ========== */
+  const notifications = useMemo(() => {
+    const now = new Date();
+    const list: Array<{ id: string; type: 'order' | 'parking' | 'alert' | 'severe' | 'dispute'; text: string; time: string }> = [];
+
+    /** 1. 严重超时通知：超时 >= 4 小时的 active 或 paid 订单（最优先） */
+    const severeOvertime: Order[] = [];
+    const warningOvertime: Order[] = [];
+
+    orders.forEach((order) => {
+      if (order.status !== 'active') return;
+      const overtimeResult = calculateOvertimeFee(order.scheduledEnd, now, 10);
+      if (overtimeResult.level === 'severe') {
+        severeOvertime.push(order);
+      } else if (overtimeResult.level === 'warning') {
+        warningOvertime.push(order);
+      }
+    });
+
+    severeOvertime.forEach((order) => {
+      const overtimeResult = calculateOvertimeFee(order.scheduledEnd, now, 10);
+      const driverName = getDriverName(order.driverId);
+      list.push({
+        id: `severe-${order.id}`,
+        type: 'severe',
+        text: `【严重超时】订单 ${order.id.toUpperCase()} · ${order.parkingTitle} · 驾驶员 ${driverName} · 已超时 ${formatDuration(overtimeResult.overtimeHours)}，建议立即联系处理`,
+        time: formatDuration(overtimeResult.overtimeHours) + '前开始',
+      });
+    });
+
+    warningOvertime.slice(0, 3).forEach((order) => {
+      const overtimeResult = calculateOvertimeFee(order.scheduledEnd, now, 10);
+      const driverName = getDriverName(order.driverId);
+      list.push({
+        id: `alert-${order.id}`,
+        type: 'alert',
+        text: `超时提醒：订单 ${order.id.toUpperCase()} · ${order.parkingTitle} · 驾驶员 ${driverName} · 已超时 ${formatDuration(overtimeResult.overtimeHours)}`,
+        time: formatDuration(overtimeResult.overtimeHours) + '前开始',
+      });
+    });
+
+    /** 2. 今日新订单动态（最近5条） */
+    const todayNew = orders
+      .filter((o) => {
+        const d = new Date(o.createdAt);
+        return d.toDateString() === now.toDateString();
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+
+    todayNew.forEach((order, idx) => {
+      const driverName = getDriverName(order.driverId);
+      const minutesAgo = Math.max(1, Math.floor((now.getTime() - new Date(order.createdAt).getTime()) / 60000));
+      list.push({
+        id: `order-${order.id}`,
+        type: 'order',
+        text: `新订单：${driverName} 预订了 ${order.parkingTitle} · 合计 ${formatCurrency(order.totalAmount)}`,
+        time: minutesAgo < 60 ? `${minutesAgo}分钟前` : `${Math.floor(minutesAgo / 60)}小时前`,
+      });
+    });
+
+    /** 3. 纠纷工单 */
+    orders
+      .filter((o) => o.status === 'disputed')
+      .slice(0, 3)
+      .forEach((order) => {
+        const driverName = getDriverName(order.driverId);
+        list.push({
+          id: `dispute-${order.id}`,
+          type: 'dispute',
+          text: `纠纷提交：${driverName} 对订单 ${order.id.toUpperCase()} 发起争议工单`,
+          time: '待处理',
+        });
+      });
+
+    /** 4. 如果列表为空（演示用），补一些示例动态 */
+    if (list.length === 0) {
+      list.push({
+        id: 'demo1',
+        type: 'order',
+        text: '暂无最新动态，系统运行平稳',
+        time: '刚刚',
+      });
+    }
+
+    /** 严重超时排最前 */
+    return list.sort((a, b) => {
+      const rank = { severe: 0, dispute: 1, alert: 2, order: 3, parking: 4 } as Record<string, number>;
+      return (rank[a.type] ?? 9) - (rank[b.type] ?? 9);
+    });
+  }, [orders]);
+
+  /** 严重超时段的专属显示图标映射（覆盖 getNotificationIcon） */
 
   /** 通知图标映射 */
   const getNotificationIcon = (type: string) => {
@@ -187,6 +267,8 @@ export default function AdminDashboardPage() {
         return <MapPin className="w-4 h-4 text-blue-500" />;
       case 'alert':
         return <AlertTriangle className="w-4 h-4 text-amber-500" />;
+      case 'severe':
+        return <AlertTriangle className="w-4 h-4 text-red-600 fill-red-200" />;
       case 'dispute':
         return <FileText className="w-4 h-4 text-red-500" />;
       default:
@@ -203,6 +285,8 @@ export default function AdminDashboardPage() {
         return 'bg-blue-50 border-blue-200';
       case 'alert':
         return 'bg-amber-50 border-amber-200';
+      case 'severe':
+        return 'bg-red-50 border-red-300';
       case 'dispute':
         return 'bg-red-50 border-red-200';
       default:
