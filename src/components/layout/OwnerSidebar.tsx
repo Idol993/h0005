@@ -10,6 +10,7 @@ import {
   ChevronRight,
   LogOut,
   Building2,
+  CalendarDays,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
@@ -45,6 +46,12 @@ const menuItems = [
     label: '出租记录',
     icon: Receipt,
     path: '/owner/orders',
+  },
+  {
+    key: 'calendar',
+    label: '可用日历',
+    icon: CalendarDays,
+    path: '/owner/parking/calendar',
   },
   {
     key: 'finance',

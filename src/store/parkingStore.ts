@@ -17,17 +17,27 @@ interface SearchParams {
   status?: ParkingStatus;
 }
 
+interface ClosedSlot {
+  date: string;
+  startHour: number;
+  endHour: number;
+}
+
 interface ParkingState {
   parkings: ParkingSpot[];
   selectedParking: ParkingSpot | null;
   loading: boolean;
   searchParams: SearchParams;
+  closedSlots: Record<string, ClosedSlot[]>;
   loadParkings: () => Promise<void>;
   searchParkings: (params: SearchParams) => Promise<ParkingSpot[]>;
   getParkingById: (id: string) => ParkingSpot | undefined;
   publishParking: (data: Omit<ParkingSpot, 'id' | 'createdAt' | 'status' | 'avgRating' | 'totalBookings' | 'ownerId'>) => Promise<ParkingSpot>;
   updateParking: (id: string, data: Partial<ParkingSpot>) => Promise<void>;
   auditParking: (id: string, status: ParkingStatus, reason?: string) => Promise<void>;
+  closeSlot: (parkingId: string, slot: ClosedSlot) => void;
+  reopenSlot: (parkingId: string, slot: ClosedSlot) => void;
+  isSlotClosed: (parkingId: string, date: string, hour: number) => boolean;
 }
 
 export const useParkingStore = create<ParkingState>((set, get) => ({
@@ -35,6 +45,7 @@ export const useParkingStore = create<ParkingState>((set, get) => ({
   selectedParking: null,
   loading: false,
   searchParams: {},
+  closedSlots: {},
 
   loadParkings: async () => {
     set({ loading: true });
@@ -142,5 +153,31 @@ export const useParkingStore = create<ParkingState>((set, get) => ({
       ),
       loading: false,
     }));
+  },
+
+  closeSlot: (parkingId: string, slot: ClosedSlot) => {
+    set((state) => ({
+      closedSlots: {
+        ...state.closedSlots,
+        [parkingId]: [...(state.closedSlots[parkingId] || []), slot],
+      },
+    }));
+  },
+
+  reopenSlot: (parkingId: string, slot: ClosedSlot) => {
+    set((state) => ({
+      closedSlots: {
+        ...state.closedSlots,
+        [parkingId]: (state.closedSlots[parkingId] || []).filter(
+          (s) =>
+            !(s.date === slot.date && s.startHour === slot.startHour && s.endHour === slot.endHour)
+        ),
+      },
+    }));
+  },
+
+  isSlotClosed: (parkingId: string, date: string, hour: number) => {
+    const slots = get().closedSlots[parkingId] || [];
+    return slots.some((s) => s.date === date && hour >= s.startHour && hour < s.endHour);
   },
 }));

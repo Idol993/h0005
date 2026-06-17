@@ -710,10 +710,14 @@ export default function ActiveOrderPage() {
                           const codeToValidate = manualEntryCode || order.entryCode;
                           const success = await enterParking(order.id, codeToValidate);
                           if (success) {
-                            setScanStatus('success');
                             const updated = orderStoreGet().orders.find(o => o.id === order.id) || null;
                             setOrder(updated);
                             setManualEntryCode('');
+                            setTimeout(() => {
+                              setShowScanModal(false);
+                              setScanStatus('scanning');
+                            }, 800);
+                            setScanStatus('success');
                           } else {
                             setScanErrorMsg(
                               manualEntryCode

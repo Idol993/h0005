@@ -24,6 +24,7 @@ import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { Badge } from '@/components/common/Badge';
 import { useParkingStore } from '@/store/parkingStore';
+import { useOrderStore } from '@/store/orderStore';
 import { formatCurrency } from '@/utils/format';
 import { cn } from '@/lib/utils';
 import type { ParkingSpot } from '@/types';
@@ -36,7 +37,8 @@ import type { ParkingSpot } from '@/types';
 export default function SearchPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { parkings, searchParkings, loading } = useParkingStore();
+  const { parkings, searchParkings, closedSlots, loading } = useParkingStore();
+  const { orders } = useOrderStore();
 
   /** 搜索关键词（从URL读取） */
   const keyword = searchParams.get('keyword') || '';
@@ -89,16 +91,44 @@ export default function SearchPage() {
     doSearch();
   }, [keyword, searchParkings, minPrice, maxPrice, selectedFacilities]);
 
-  /** 应用排序 */
+  /** 应用排序 + 过滤已关闭/已占用车位 */
   const sortedResults = useMemo(() => {
-    const list = [...results];
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const currentHour = now.getHours();
+
+    const list = results.filter((p) => {
+      const parkingClosed = closedSlots[p.id] || [];
+      const bookedOrders = orders.filter(
+        (o) => o.parkingId === p.id && (o.status === 'paid' || o.status === 'active')
+      );
+
+      const slots = p.availableSlots || [];
+      const availableToday = slots.filter((s) => {
+        const endH = parseInt(s.endTime.split(':')[0], 10);
+        const startH = parseInt(s.startTime.split(':')[0], 10);
+        if (endH <= currentHour) return false;
+        const isBooked = bookedOrders.some((o) => {
+          const os = new Date(o.scheduledStart);
+          const oe = new Date(o.scheduledEnd);
+          return os.toISOString().slice(0, 10) === todayStr && startH < oe.getHours() && endH > os.getHours();
+        });
+        const isClosed = parkingClosed.some(
+          (c) => c.date === todayStr && startH < c.endHour && endH > c.startHour
+        );
+        return !isBooked && !isClosed;
+      });
+
+      return availableToday.length > 0 || slots.length === 0;
+    });
+
     if (sortBy === 'price') {
       list.sort((a, b) => a.hourlyRate - b.hourlyRate);
     } else if (sortBy === 'rating') {
       list.sort((a, b) => b.avgRating - a.avgRating);
     }
     return list;
-  }, [results, sortBy]);
+  }, [results, sortBy, orders, closedSlots]);
 
   /** 处理搜索 */
   const handleSearch = () => {

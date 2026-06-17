@@ -180,6 +180,10 @@ export interface Order {
   rating?: number;
   /** 用户评价文字 */
   review?: string;
+  /** 是否已改签过（只能改签一次） */
+  rescheduled?: boolean;
+  /** 是否已标记待核对 */
+  flagged?: boolean;
   /** 订单创建时间 */
   createdAt: string;
 }

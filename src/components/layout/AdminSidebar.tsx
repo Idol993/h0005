@@ -10,6 +10,7 @@ import {
   ChevronRight,
   LogOut,
   Shield,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
@@ -52,6 +53,12 @@ const menuItems = [
     label: '用户管理',
     icon: Users,
     path: '/admin/users',
+  },
+  {
+    key: 'reconciliation',
+    label: '订单对账',
+    icon: FileSpreadsheet,
+    path: '/admin/reconciliation',
   },
 ];
 

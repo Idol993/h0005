@@ -46,8 +46,10 @@ interface OrderState {
   submitRating: (orderId: string, rating: number, review?: string) => Promise<void>;
   submitDispute: (orderId: string, reason: string, type: string) => Promise<void>;
   cancelOrder: (orderId: string) => Promise<void>;
+  rescheduleOrder: (orderId: string, newStart: string, newEnd: string) => Promise<boolean>;
   getDriverOrders: (driverId?: string) => Order[];
   getOwnerOrders: (ownerId?: string) => Order[];
+  flagOrder: (orderId: string, flagged: boolean) => void;
 }
 
 export const useOrderStore = create<OrderState>((set, get) => ({
@@ -258,6 +260,54 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     });
   },
 
+  rescheduleOrder: async (orderId: string, newStart: string, newEnd: string) => {
+    set({ loading: true });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const order = get().orders.find((o) => o.id === orderId);
+    if (!order || (order.status !== 'pending' && order.status !== 'paid')) {
+      set({ loading: false });
+      return false;
+    }
+    if (order.rescheduled) {
+      set({ loading: false });
+      return false;
+    }
+
+    const parking = useParkingStore.getState().getParkingById(order.parkingId);
+    const newHours = calculateHours(newStart, newEnd);
+    let newBaseAmount = Math.round(newHours * (parking?.hourlyRate || 10) * 100) / 100;
+    if (parking?.dailyCap && parking.dailyCap > 0) {
+      newBaseAmount = Math.min(newBaseAmount, parking.dailyCap);
+    }
+    const newTotalAmount = newBaseAmount + order.overtimeAmount;
+    const newPreAuth = Math.round(newTotalAmount * 1.2 * 100) / 100;
+
+    set((state) => {
+      const updated = state.orders.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              scheduledStart: newStart,
+              scheduledEnd: newEnd,
+              scheduledHours: newHours,
+              baseAmount: newBaseAmount,
+              totalAmount: newTotalAmount,
+              preAuthAmount: newPreAuth,
+              rescheduled: true,
+            }
+          : o
+      );
+      persistOrders(updated);
+      const activeUpdated = state.activeOrder?.id === orderId
+        ? updated.find((o) => o.id === orderId) || null
+        : state.activeOrder;
+      return { orders: updated, activeOrder: activeUpdated, loading: false };
+    });
+
+    return true;
+  },
+
   getDriverOrders: (driverId?: string) => {
     const user = useAuthStore.getState().user;
     const id = driverId || user?.id;
@@ -280,5 +330,15 @@ export const useOrderStore = create<OrderState>((set, get) => ({
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
+  },
+
+  flagOrder: (orderId: string, flagged: boolean) => {
+    set((state) => {
+      const updated = state.orders.map((o) =>
+        o.id === orderId ? { ...o, flagged } : o
+      );
+      persistOrders(updated);
+      return { orders: updated };
+    });
   },
 }));

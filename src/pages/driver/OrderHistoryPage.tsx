@@ -14,6 +14,11 @@ import {
   Search,
   FileText,
   Eye,
+  CreditCard,
+  Navigation,
+  KeyRound,
+  Timer,
+  PenLine,
 } from 'lucide-react';
 import { DriverHeader } from '@/components/layout/DriverHeader';
 import { Card } from '@/components/common/Card';
@@ -55,7 +60,7 @@ const STATUS_CONFIG: Record<OrderStatus, { variant: 'success' | 'info' | 'warnin
 export default function OrderHistoryPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { loadOrders, getDriverOrders, submitRating, submitDispute, loading } = useOrderStore();
+  const { loadOrders, getDriverOrders, submitRating, submitDispute, cancelOrder, payOrder, rescheduleOrder, loading } = useOrderStore();
   const { getParkingById } = useParkingStore();
   const { user } = useAuthStore();
 
@@ -69,6 +74,14 @@ export default function OrderHistoryPage() {
   const [ratingOrder, setRatingOrder] = useState<{ order: Order; rating: number; review: string } | null>(null);
   /** 纠纷弹窗 */
   const [disputeOrder, setDisputeOrder] = useState<{ order: Order; reason: string; type: string } | null>(null);
+  /** 取消确认弹窗 */
+  const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
+  /** 入场码弹窗 */
+  const [entryCodeOrder, setEntryCodeOrder] = useState<Order | null>(null);
+  /** 改签弹窗 */
+  const [rescheduleTarget, setRescheduleTarget] = useState<Order | null>(null);
+  const [rescheduleStart, setRescheduleStart] = useState('');
+  const [rescheduleEnd, setRescheduleEnd] = useState('');
 
   /** 加载订单 */
   useEffect(() => {
@@ -302,31 +315,17 @@ export default function OrderHistoryPage() {
                           </div>
                         </div>
 
-                        {/* 已完成订单显示评分 */}
-                        {order.status === 'completed' && (
+                        {/* 已完成订单显示评分（紧凑模式） */}
+                        {order.status === 'completed' && order.rating && (
                           <div className="flex items-center gap-2 mb-3">
-                            {order.rating ? (
-                              <div className="flex items-center gap-2">
-                                {renderStarRating(order.rating, undefined, true)}
-                                {order.review && (
-                                  <span className="text-xs text-slate-500">
-                                    "{order.review}"
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => setRatingOrder({ order, rating: 5, review: '' })}
-                                className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1"
-                              >
-                                <Star className="w-3.5 h-3.5" />
-                                去评价
-                              </button>
+                            {renderStarRating(order.rating, undefined, true)}
+                            {order.review && (
+                              <span className="text-xs text-slate-500">"{order.review}"</span>
                             )}
                           </div>
                         )}
 
-                        {/* 金额和操作 */}
+                        {/* 金额和操作按钮 */}
                         <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                           <div>
                             <span className="text-xs text-slate-400 mr-1">合计</span>
@@ -335,34 +334,141 @@ export default function OrderHistoryPage() {
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-2">
-                            {/* 进行中订单 */}
-                            {(order.status === 'paid' || order.status === 'active') && (
+                          <div className="flex items-center gap-2 flex-wrap justify-end">
+                            {order.status === 'pending' && (
+                              <>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  leftIcon={<CreditCard className="w-3.5 h-3.5" />}
+                                  onClick={() => navigate(`/payment/${order.id}`)}
+                                >
+                                  去支付
+                                </Button>
+                                {!order.rescheduled && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    leftIcon={<PenLine className="w-3.5 h-3.5" />}
+                                    onClick={() => {
+                                      setRescheduleTarget(order);
+                                      setRescheduleStart(order.scheduledStart.slice(0, 16));
+                                      setRescheduleEnd(order.scheduledEnd.slice(0, 16));
+                                    }}
+                                  >
+                                    改签
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="!text-slate-500 hover:!text-red-500"
+                                  leftIcon={<XCircle className="w-3.5 h-3.5" />}
+                                  onClick={() => setCancelTarget(order)}
+                                >
+                                  取消
+                                </Button>
+                              </>
+                            )}
+
+                            {order.status === 'paid' && (
+                              <>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  leftIcon={<KeyRound className="w-3.5 h-3.5" />}
+                                  onClick={() => setEntryCodeOrder(order)}
+                                >
+                                  入场码
+                                </Button>
+                                {!order.rescheduled && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    leftIcon={<PenLine className="w-3.5 h-3.5" />}
+                                    onClick={() => {
+                                      setRescheduleTarget(order);
+                                      setRescheduleStart(order.scheduledStart.slice(0, 16));
+                                      setRescheduleEnd(order.scheduledEnd.slice(0, 16));
+                                    }}
+                                  >
+                                    改签
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  leftIcon={<Navigation className="w-3.5 h-3.5" />}
+                                  onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(parking?.address || '')}`)}
+                                >
+                                  导航
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  leftIcon={<Car className="w-3.5 h-3.5" />}
+                                  onClick={() => navigate('/order/active')}
+                                >
+                                  去入场
+                                </Button>
+                              </>
+                            )}
+
+                            {order.status === 'active' && (
                               <Button
                                 variant="primary"
                                 size="sm"
+                                leftIcon={<Timer className="w-3.5 h-3.5" />}
                                 onClick={() => navigate('/order/active')}
                               >
-                                查看进行中
+                                去计时页
                               </Button>
                             )}
 
-                            {/* 已完成可发起纠纷 */}
                             {order.status === 'completed' && (
-                              <button
-                                onClick={() => setDisputeOrder({ order, reason: '', type: 'other' })}
-                                className="text-xs text-slate-500 hover:text-red-500 transition-colors flex items-center gap-1"
-                              >
-                                <AlertCircle className="w-3.5 h-3.5" />
-                                纠纷
-                              </button>
+                              <>
+                                {order.rating ? (
+                                  <div className="flex items-center gap-1">
+                                    {renderStarRating(order.rating, undefined, true)}
+                                  </div>
+                                ) : (
+                                  <Button
+                                    variant="primary"
+                                    size="sm"
+                                    leftIcon={<Star className="w-3.5 h-3.5" />}
+                                    onClick={() => setRatingOrder({ order, rating: 5, review: '' })}
+                                  >
+                                    去评价
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  leftIcon={<AlertCircle className="w-3.5 h-3.5" />}
+                                  onClick={() => setDisputeOrder({ order, reason: '', type: 'other' })}
+                                >
+                                  纠纷
+                                </Button>
+                              </>
                             )}
 
-                            {/* 纠纷中状态 */}
                             {order.status === 'disputed' && (
                               <Badge variant="warning" size="sm" showIcon={false}>
                                 <MessageSquare className="w-3 h-3 mr-1" />
                                 处理中
+                              </Badge>
+                            )}
+
+                            {order.status === 'cancelled' && (
+                              <Badge variant="default" size="sm" showIcon={false}>
+                                <XCircle className="w-3 h-3 mr-1" />
+                                已取消
+                              </Badge>
+                            )}
+
+                            {order.status === 'refunded' && (
+                              <Badge variant="info" size="sm" showIcon={false}>
+                                已退款
                               </Badge>
                             )}
                           </div>
@@ -577,28 +683,21 @@ export default function OrderHistoryPage() {
       >
         {disputeOrder && (
           <div className="space-y-5">
-            {/* 提示 */}
             <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200">
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
                 <div className="text-sm text-amber-700">
                   <p className="font-semibold mb-1">纠纷说明</p>
-                  <p className="text-amber-600">
-                    请详细描述您遇到的问题，客服会在24小时内介入处理。
-                  </p>
+                  <p className="text-amber-600">请详细描述您遇到的问题，客服会在24小时内介入处理。</p>
                 </div>
               </div>
             </div>
-
-            {/* 订单信息 */}
             <div className="p-3 rounded-xl bg-slate-50 text-sm">
               <p className="font-medium text-slate-700 mb-1">{disputeOrder.order.parkingTitle}</p>
               <p className="text-slate-500">
                 订单号：{disputeOrder.order.id.toUpperCase()} · {formatCurrency(disputeOrder.order.totalAmount)}
               </p>
             </div>
-
-            {/* 原因选择 */}
             <div>
               <p className="text-sm font-medium text-slate-700 mb-3">纠纷原因</p>
               <div className="space-y-2">
@@ -625,8 +724,6 @@ export default function OrderHistoryPage() {
                 ))}
               </div>
             </div>
-
-            {/* 详细描述 */}
             <div>
               <p className="text-sm font-medium text-slate-700 mb-3">详细描述（选填）</p>
               <textarea
@@ -637,6 +734,221 @@ export default function OrderHistoryPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* ========== 取消订单确认弹窗 ========== */}
+      <Modal
+        open={!!cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        title="取消订单"
+        footer={
+          <div className="flex gap-3 w-full">
+            <Button variant="ghost" size="lg" className="flex-1" onClick={() => setCancelTarget(null)}>
+              返回
+            </Button>
+            <Button
+              variant="danger"
+              size="lg"
+              className="flex-1"
+              loading={loading}
+              onClick={async () => {
+                if (!cancelTarget) return;
+                await cancelOrder(cancelTarget.id);
+                setCancelTarget(null);
+              }}
+            >
+              确认取消
+            </Button>
+          </div>
+        }
+      >
+        {cancelTarget && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                <div className="text-sm text-red-700">
+                  <p className="font-semibold mb-1">确认取消此订单？</p>
+                  <p className="text-red-600">取消后订单将无法恢复，如已支付将按退款流程处理。</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 text-sm">
+              <p className="font-medium text-slate-700">{cancelTarget.parkingTitle}</p>
+              <p className="text-slate-500 mt-1">
+                订单号：{cancelTarget.id.toUpperCase()} · {formatCurrency(cancelTarget.totalAmount)}
+              </p>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ========== 入场码弹窗 ========== */}
+      <Modal
+        open={!!entryCodeOrder}
+        onClose={() => setEntryCodeOrder(null)}
+        title="入场验证码"
+      >
+        {entryCodeOrder && (() => {
+          const eparking = getParkingById(entryCodeOrder.parkingId);
+          return (
+            <div className="space-y-5">
+              <div className="text-center py-4">
+                <div className="flex justify-center gap-2 mb-4">
+                  {entryCodeOrder.entryCode.split('').map((digit, idx) => (
+                    <div
+                      key={idx}
+                      className="w-12 h-14 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white text-2xl font-bold flex items-center justify-center shadow-lg"
+                    >
+                      {digit}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-slate-500">请在闸机输入此6位验证码入场</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-slate-50 space-y-2">
+                <p className="font-medium text-slate-800">{entryCodeOrder.parkingTitle}</p>
+                <p className="text-sm text-slate-500 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5" />
+                  {eparking?.address}
+                </p>
+                <p className="text-sm text-slate-500 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" />
+                  {formatDateTime(entryCodeOrder.scheduledStart)} - {formatDateTime(entryCodeOrder.scheduledEnd).split(' ')[1]}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  leftIcon={<Navigation className="w-4 h-4" />}
+                  onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(eparking?.address || '')}`)}
+                >
+                  导航去车位
+                </Button>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  leftIcon={<Car className="w-4 h-4" />}
+                  onClick={() => {
+                    setEntryCodeOrder(null);
+                    navigate('/order/active');
+                  }}
+                >
+                  去扫码入场
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
+      {/* ========== 改签弹窗 ========== */}
+      <Modal
+        open={!!rescheduleTarget}
+        onClose={() => setRescheduleTarget(null)}
+        title="改签预约时间"
+        footer={
+          <div className="flex gap-3 w-full">
+            <Button variant="ghost" size="lg" className="flex-1" onClick={() => setRescheduleTarget(null)}>
+              取消
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
+              className="flex-1"
+              loading={loading}
+              disabled={!rescheduleStart || !rescheduleEnd || new Date(rescheduleEnd) <= new Date(rescheduleStart)}
+              onClick={async () => {
+                if (!rescheduleTarget) return;
+                const success = await rescheduleOrder(
+                  rescheduleTarget.id,
+                  new Date(rescheduleStart).toISOString(),
+                  new Date(rescheduleEnd).toISOString()
+                );
+                if (success) {
+                  setRescheduleTarget(null);
+                }
+              }}
+            >
+              确认改签
+            </Button>
+          </div>
+        }
+      >
+        {rescheduleTarget && (() => {
+          const rp = getParkingById(rescheduleTarget.parkingId);
+          const newStart = rescheduleStart ? new Date(rescheduleStart) : null;
+          const newEnd = rescheduleEnd ? new Date(rescheduleEnd) : null;
+          const newHours = (newStart && newEnd && newEnd > newStart)
+            ? Math.round(((newEnd.getTime() - newStart.getTime()) / 3600000) * 10) / 10
+            : 0;
+          const newBase = newHours * (rp?.hourlyRate || 10);
+          const priceDiff = newBase - rescheduleTarget.baseAmount;
+          const timeConflict = newEnd && new Date(rescheduleTarget.scheduledStart).getTime() !== newStart?.getTime();
+
+          return (
+            <div className="space-y-5">
+              <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
+                  <div className="text-sm text-blue-700">
+                    <p className="font-semibold mb-1">改签须知</p>
+                    <p className="text-blue-600">每个订单仅可改签一次，改签后原预约时段将被释放。费用多退少补。</p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 text-sm">
+                <p className="font-medium text-slate-700">{rescheduleTarget.parkingTitle}</p>
+                <p className="text-slate-500 mt-1">
+                  原预约：{formatDateTime(rescheduleTarget.scheduledStart)} - {formatDateTime(rescheduleTarget.scheduledEnd).split(' ')[1]}
+                </p>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">新开始时间</label>
+                  <input
+                    type="datetime-local"
+                    value={rescheduleStart}
+                    onChange={(e) => setRescheduleStart(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">新结束时间</label>
+                  <input
+                    type="datetime-local"
+                    value={rescheduleEnd}
+                    onChange={(e) => setRescheduleEnd(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all"
+                  />
+                </div>
+              </div>
+              {newHours > 0 && (
+                <div className="p-4 rounded-2xl bg-slate-50 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">新预约时长</span>
+                    <span className="font-medium text-slate-800">{newHours.toFixed(1)} 小时</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">新基础费用</span>
+                    <span className="font-medium text-slate-800">{formatCurrency(newBase)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">费用差额</span>
+                    <span className={cn('font-bold', priceDiff > 0 ? 'text-accent-600' : priceDiff < 0 ? 'text-emerald-600' : 'text-slate-800')}>
+                      {priceDiff > 0 ? '+' : ''}{formatCurrency(priceDiff)}
+                      {priceDiff > 0 ? '（需补缴）' : priceDiff < 0 ? '（将退还）' : '（无变化）'}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {newEnd && newEnd <= (newStart || new Date()) && (
+                <p className="text-sm text-red-500">结束时间必须晚于开始时间</p>
+              )}
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );

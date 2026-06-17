@@ -21,12 +21,14 @@ import OwnerParkingListPage from '@/pages/owner/OwnerParkingListPage';
 import OwnerPublishPage from '@/pages/owner/OwnerPublishPage';
 import OwnerOrdersPage from '@/pages/owner/OwnerOrdersPage';
 import OwnerFinancePage from '@/pages/owner/OwnerFinancePage';
+import OwnerParkingCalendarPage from '@/pages/owner/OwnerParkingCalendarPage';
 
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
 import AdminAuditPage from '@/pages/admin/AdminAuditPage';
 import AdminDisputesPage from '@/pages/admin/AdminDisputesPage';
 import AdminViolationsPage from '@/pages/admin/AdminViolationsPage';
 import AdminUsersPage from '@/pages/admin/AdminUsersPage';
+import AdminReconciliationPage from '@/pages/admin/AdminReconciliationPage';
 
 function RoleRedirect() {
   const { user } = useAuthStore();
@@ -158,6 +160,14 @@ export default function App() {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/owner/parking/calendar"
+            element={
+              <PrivateRoute allowedRoles={[UserRole.OWNER]}>
+                <OwnerParkingCalendarPage />
+              </PrivateRoute>
+            }
+          />
 
           <Route
             path="/admin/dashboard"
@@ -196,6 +206,14 @@ export default function App() {
             element={
               <PrivateRoute allowedRoles={[UserRole.ADMIN]}>
                 <AdminUsersPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/admin/reconciliation"
+            element={
+              <PrivateRoute allowedRoles={[UserRole.ADMIN]}>
+                <AdminReconciliationPage />
               </PrivateRoute>
             }
           />
