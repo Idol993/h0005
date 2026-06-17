@@ -1,0 +1,372 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========== 全局变量和基础样式 ========== */
+:root {
+  font-family: "Source Han Sans SC", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light;
+  color: #0f172a;
+  background-color: #f8fafc;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ========== HTML和Body全局设置 ========== */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ========== 自定义滚动条样式 ========== */
+/* Webkit 内核浏览器（Chrome、Safari、Edge） */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #cbd5e1, #94a3b8);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #94a3b8, #64748b);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, #64748b, #475569);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+/* ========== 全局字体设置 ========== */
+@layer base {
+  /* 标题字体 */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Source Han Sans SC", "Noto Sans SC", system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* 等宽字体 */
+  code, pre, kbd, samp {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  /* 数字等宽 */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ========== 玻璃态(Glass)效果类 ========== */
+@layer components {
+  /* 基础玻璃态 */
+  .glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+
+  /* 浅色玻璃态 */
+  .glass-light {
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(8px) saturate(150%);
+    -webkit-backdrop-filter: blur(8px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+
+  /* 深色玻璃态 */
+  .glass-dark {
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* 强调玻璃态（带渐变） */
+  .glass-accent {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 107, 53, 0.1),
+      rgba(255, 255, 255, 0.7)
+    );
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border: 1px solid rgba(255, 107, 53, 0.2);
+  }
+}
+
+/* ========== 渐变文本类 ========== */
+@layer utilities {
+  /* 品牌蓝渐变 */
+  .gradient-text-brand {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2d4a73 50%, #1a3252 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  /* 橙色渐变 */
+  .gradient-text-accent {
+    background: linear-gradient(135deg, #ff6b35 0%, #f54e12 50%, #d63808 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  /* 绿到蓝渐变 */
+  .gradient-text-ocean {
+    background: linear-gradient(135deg, #10b981 0%, #06b6d4 50%, #3b82f6 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  /* 紫到粉渐变 */
+  .gradient-text-aurora {
+    background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 50%, #f43f5e 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  /* 彩虹渐变 */
+  .gradient-text-rainbow {
+    background: linear-gradient(
+      90deg,
+      #ef4444 0%,
+      #f59e0b 20%,
+      #10b981 40%,
+      #3b82f6 60%,
+      #8b5cf6 80%,
+      #ec4899 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+}
+
+/* ========== Leaflet地图容器样式 ========== */
+@layer components {
+  .leaflet-container {
+    width: 100%;
+    height: 100%;
+    background: #e2e8f0;
+    border-radius: 1rem;
+    overflow: hidden;
+    font-family: inherit;
+  }
+
+  /* Leaflet控件美化 */
+  .leaflet-container .leaflet-control-zoom {
+    border: none;
+    box-shadow: 0 4px 16px rgba(30, 58, 95, 0.12);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .leaflet-container .leaflet-control-zoom a {
+    width: 36px;
+    height: 36px;
+    line-height: 36px;
+    font-size: 18px;
+    color: #1e3a5f;
+    background: #ffffff;
+    border: none;
+    transition: background 0.2s ease;
+  }
+
+  .leaflet-container .leaflet-control-zoom a:hover {
+    background: #f1f5f9;
+    color: #ff6b35;
+  }
+
+  /* Leaflet弹出框美化 */
+  .leaflet-popup-content-wrapper {
+    border-radius: 16px;
+    padding: 0;
+    box-shadow: 0 8px 32px rgba(30, 58, 95, 0.15);
+    overflow: hidden;
+  }
+
+  .leaflet-popup-content {
+    margin: 0;
+    width: auto !important;
+  }
+
+  .leaflet-popup-tip {
+    box-shadow: 0 4px 12px rgba(30, 58, 95, 0.1);
+  }
+
+  /* Leaflet标记点美化 */
+  .custom-parking-marker {
+    filter: drop-shadow(0 4px 8px rgba(30, 58, 95, 0.25));
+    transition: transform 0.2s ease;
+  }
+
+  .custom-parking-marker:hover {
+    transform: translateY(-4px) scale(1.05);
+  }
+}
+
+/* ========== 入场码大数字样式 ========== */
+@layer components {
+  /* 入场码容器 */
+  .entry-code-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 2rem;
+    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+    border-radius: 1.5rem;
+    border: 2px dashed #cbd5e1;
+  }
+
+  /* 单个数字方块 */
+  .entry-code-digit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 4.5rem;
+    height: 6rem;
+    font-size: 3.75rem;
+    font-weight: 800;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    line-height: 1;
+    color: #1e3a5f;
+    background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+    border: 2px solid #e2e8f0;
+    border-radius: 1rem;
+    box-shadow:
+      0 4px 12px rgba(30, 58, 95, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    transition: all 0.3s ease;
+  }
+
+  .entry-code-digit:hover {
+    border-color: #ff6b35;
+    box-shadow:
+      0 8px 24px rgba(255, 107, 53, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    transform: translateY(-2px);
+  }
+
+  /* 强调色数字方块 */
+  .entry-code-digit-accent {
+    color: #ffffff;
+    background: linear-gradient(145deg, #ff6b35 0%, #d63808 100%);
+    border-color: #ff6b35;
+    box-shadow:
+      0 8px 24px rgba(255, 107, 53, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .entry-code-digit-accent:hover {
+    box-shadow:
+      0 12px 32px rgba(255, 107, 53, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  /* 分隔符 */
+  .entry-code-separator {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0 0.5rem;
+  }
+
+  .entry-code-separator::before,
+  .entry-code-separator::after {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: #94a3b8;
+  }
+
+  /* 响应式调整 - 小屏幕 */
+  @media (max-width: 640px) {
+    .entry-code-container {
+      gap: 0.5rem;
+      padding: 1.25rem;
+    }
+
+    .entry-code-digit {
+      width: 3.25rem;
+      height: 4.5rem;
+      font-size: 2.5rem;
+      border-radius: 0.75rem;
+    }
+
+    .entry-code-separator {
+      gap: 0.5rem;
+    }
+
+    .entry-code-separator::before,
+    .entry-code-separator::after {
+      width: 0.375rem;
+      height: 0.375rem;
+    }
+  }
+}
+
+/* ========== Toast进度条动画 ========== */
+@keyframes toastProgress {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+/* ========== 选中文字样式 ========== */
+::selection {
+  background: rgba(255, 107, 53, 0.2);
+  color: #1e3a5f;
+}
+
+/* ========== 移除默认focus轮廓（自定义focus样式在组件中） ========== */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+select:focus:not(:focus-visible) {
+  outline: none;
+}
