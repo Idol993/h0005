@@ -46,7 +46,11 @@ interface OrderState {
   submitRating: (orderId: string, rating: number, review?: string) => Promise<void>;
   submitDispute: (orderId: string, reason: string, type: string) => Promise<void>;
   cancelOrder: (orderId: string) => Promise<void>;
-  rescheduleOrder: (orderId: string, newStart: string, newEnd: string) => Promise<boolean>;
+  rescheduleOrder: (
+    orderId: string,
+    newStart: string,
+    newEnd: string
+  ) => Promise<{ success: boolean; reason?: string }>;
   getDriverOrders: (driverId?: string) => Order[];
   getOwnerOrders: (ownerId?: string) => Order[];
   flagOrder: (orderId: string, flagged: boolean) => void;
@@ -267,11 +271,23 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     const order = get().orders.find((o) => o.id === orderId);
     if (!order || (order.status !== 'pending' && order.status !== 'paid')) {
       set({ loading: false });
-      return false;
+      return { success: false, reason: '订单状态不支持改签' };
     }
     if (order.rescheduled) {
       set({ loading: false });
-      return false;
+      return { success: false, reason: '该订单已改签过，仅可改签一次' };
+    }
+
+    /** 校验时间是否可用 */
+    const check = useParkingStore.getState().checkTimeAvailability(
+      order.parkingId,
+      newStart,
+      newEnd,
+      order.id
+    );
+    if (!check.available) {
+      set({ loading: false });
+      return { success: false, reason: check.reason || '该时段不可用' };
     }
 
     const parking = useParkingStore.getState().getParkingById(order.parkingId);
@@ -305,7 +321,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       return { orders: updated, activeOrder: activeUpdated, loading: false };
     });
 
-    return true;
+    return { success: true };
   },
 
   getDriverOrders: (driverId?: string) => {

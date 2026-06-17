@@ -389,8 +389,16 @@ export default function OwnerOrdersPage() {
                               </button>
                             </td>
                             <td className="px-6 py-4">
-                              <div className="font-mono text-sm font-semibold text-slate-800">
-                                {order.id}
+                              <div className="flex items-center gap-2">
+                                <div className="font-mono text-sm font-semibold text-slate-800">
+                                  {order.id}
+                                </div>
+                                {order.flagged && (
+                                  <Badge variant="warning" size="sm" showIcon={false}>
+                                    <AlertTriangle className="w-3 h-3 mr-1" />
+                                    待核对
+                                  </Badge>
+                                )}
                               </div>
                               <div className="text-xs text-slate-400 mt-0.5">
                                 {formatDate(order.createdAt)}
@@ -588,12 +596,23 @@ export default function OwnerOrdersPage() {
 
                                   {/* 纠纷信息（如果有） */}
                                   {order.status === 'disputed' && order.disputeReason && (
-                                    <div className="p-4 rounded-xl bg-red-50 border border-red-200 md:col-span-4">
+                                    <div className="p-4 rounded-xl bg-red-50 border border-red-200 md:col-span-2">
                                       <div className="flex items-center gap-2 text-xs text-red-600 font-semibold mb-2">
                                         <AlertTriangle className="w-4 h-4" />
                                         纠纷说明
                                       </div>
                                       <p className="text-sm text-red-700">{order.disputeReason}</p>
+                                    </div>
+                                  )}
+
+                                  {/* 待核对标记（如果有） */}
+                                  {order.flagged && (
+                                    <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 md:col-span-2">
+                                      <div className="flex items-center gap-2 text-xs text-amber-700 font-semibold mb-2">
+                                        <AlertTriangle className="w-4 h-4" />
+                                        平台标记：待核对
+                                      </div>
+                                      <p className="text-sm text-amber-600">该订单已被平台标记为待核对状态，如有疑问请联系客服。</p>
                                     </div>
                                   )}
                                 </div>

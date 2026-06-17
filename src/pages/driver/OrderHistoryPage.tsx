@@ -61,7 +61,7 @@ export default function OrderHistoryPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { loadOrders, getDriverOrders, submitRating, submitDispute, cancelOrder, payOrder, rescheduleOrder, loading } = useOrderStore();
-  const { getParkingById } = useParkingStore();
+  const { getParkingById, checkTimeAvailability } = useParkingStore();
   const { user } = useAuthStore();
 
   /** 当前Tab */
@@ -82,11 +82,37 @@ export default function OrderHistoryPage() {
   const [rescheduleTarget, setRescheduleTarget] = useState<Order | null>(null);
   const [rescheduleStart, setRescheduleStart] = useState('');
   const [rescheduleEnd, setRescheduleEnd] = useState('');
+  const [rescheduleError, setRescheduleError] = useState('');
 
   /** 加载订单 */
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
+
+  /** 改签时间变化时实时校验可用性 */
+  useEffect(() => {
+    if (!rescheduleTarget || !rescheduleStart || !rescheduleEnd) {
+      setRescheduleError('');
+      return;
+    }
+    const start = new Date(rescheduleStart);
+    const end = new Date(rescheduleEnd);
+    if (end <= start) {
+      setRescheduleError('结束时间必须晚于开始时间');
+      return;
+    }
+    const result = checkTimeAvailability(
+      rescheduleTarget.parkingId,
+      start.toISOString(),
+      end.toISOString(),
+      rescheduleTarget.id
+    );
+    if (!result.available) {
+      setRescheduleError(result.reason || '该时段不可用');
+    } else {
+      setRescheduleError('');
+    }
+  }, [rescheduleTarget, rescheduleStart, rescheduleEnd, checkTimeAvailability]);
 
   /** 同步URL参数 */
   useEffect(() => {
@@ -251,11 +277,17 @@ export default function OrderHistoryPage() {
                   >
                     {/* 订单头 */}
                     <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant={statusCfg.variant} size="md" showIcon={false}>
                           <StatusIcon className="w-3.5 h-3.5 mr-1" />
                           {statusCfg.label}
                         </Badge>
+                        {order.flagged && (
+                          <Badge variant="warning" size="sm" showIcon={false}>
+                            <AlertCircle className="w-3 h-3 mr-1" />
+                            待核对
+                          </Badge>
+                        )}
                         <span className="text-xs text-slate-400">
                           订单号：{order.id.toUpperCase()}
                         </span>
@@ -503,7 +535,15 @@ export default function OrderHistoryPage() {
                     <StatusIcon className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">{statusCfg.label}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-slate-900">{statusCfg.label}</p>
+                      {detailOrder.flagged && (
+                        <Badge variant="warning" size="sm" showIcon={false}>
+                          <AlertCircle className="w-3 h-3 mr-1" />
+                          待核对
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-500">{detailOrder.id.toUpperCase()}</p>
                   </div>
                 </div>
@@ -858,16 +898,24 @@ export default function OrderHistoryPage() {
               size="lg"
               className="flex-1"
               loading={loading}
-              disabled={!rescheduleStart || !rescheduleEnd || new Date(rescheduleEnd) <= new Date(rescheduleStart)}
+              disabled={
+                !rescheduleStart ||
+                !rescheduleEnd ||
+                new Date(rescheduleEnd) <= new Date(rescheduleStart) ||
+                !!rescheduleError
+              }
               onClick={async () => {
                 if (!rescheduleTarget) return;
-                const success = await rescheduleOrder(
+                const result = await rescheduleOrder(
                   rescheduleTarget.id,
                   new Date(rescheduleStart).toISOString(),
                   new Date(rescheduleEnd).toISOString()
                 );
-                if (success) {
+                if (result.success) {
                   setRescheduleTarget(null);
+                  setRescheduleError('');
+                } else {
+                  setRescheduleError(result.reason || '改签失败');
                 }
               }}
             >
@@ -924,27 +972,39 @@ export default function OrderHistoryPage() {
                   />
                 </div>
               </div>
-              {newHours > 0 && (
-                <div className="p-4 rounded-2xl bg-slate-50 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">新预约时长</span>
-                    <span className="font-medium text-slate-800">{newHours.toFixed(1)} 小时</span>
+              {newHours > 0 && !rescheduleError && (
+                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-2 text-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    <span className="font-medium text-emerald-700">该时段可用</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">新基础费用</span>
-                    <span className="font-medium text-slate-800">{formatCurrency(newBase)}</span>
+                    <span className="text-emerald-600">新预约时长</span>
+                    <span className="font-medium text-emerald-800">{newHours.toFixed(1)} 小时</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">费用差额</span>
-                    <span className={cn('font-bold', priceDiff > 0 ? 'text-accent-600' : priceDiff < 0 ? 'text-emerald-600' : 'text-slate-800')}>
+                    <span className="text-emerald-600">新基础费用</span>
+                    <span className="font-medium text-emerald-800">{formatCurrency(newBase)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-emerald-600">费用差额</span>
+                    <span className={cn('font-bold', priceDiff > 0 ? 'text-accent-600' : priceDiff < 0 ? 'text-emerald-600' : 'text-emerald-800')}>
                       {priceDiff > 0 ? '+' : ''}{formatCurrency(priceDiff)}
                       {priceDiff > 0 ? '（需补缴）' : priceDiff < 0 ? '（将退还）' : '（无变化）'}
                     </span>
                   </div>
                 </div>
               )}
-              {newEnd && newEnd <= (newStart || new Date()) && (
-                <p className="text-sm text-red-500">结束时间必须晚于开始时间</p>
+              {rescheduleError && (
+                <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-medium text-red-700 text-sm mb-1">暂不可改签</p>
+                      <p className="text-sm text-red-600">{rescheduleError}</p>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           );

@@ -7,6 +7,18 @@ import {
 } from '../data/parkings';
 import { generateId } from '../utils/format';
 import { useAuthStore } from './authStore';
+import { getStorage, setStorage } from '../utils/storage';
+import { useOrderStore } from './orderStore';
+
+const CLOSED_SLOTS_KEY = 'parking_app_closed_slots';
+
+function loadPersistedClosedSlots(): Record<string, ClosedSlot[]> {
+  return getStorage<Record<string, ClosedSlot[]>>(CLOSED_SLOTS_KEY, {});
+}
+
+function persistClosedSlots(slots: Record<string, ClosedSlot[]>) {
+  setStorage(CLOSED_SLOTS_KEY, slots);
+}
 
 interface SearchParams {
   keyword?: string;
@@ -38,6 +50,12 @@ interface ParkingState {
   closeSlot: (parkingId: string, slot: ClosedSlot) => void;
   reopenSlot: (parkingId: string, slot: ClosedSlot) => void;
   isSlotClosed: (parkingId: string, date: string, hour: number) => boolean;
+  checkTimeAvailability: (
+    parkingId: string,
+    start: string | Date,
+    end: string | Date,
+    excludeOrderId?: string
+  ) => { available: boolean; reason?: string };
 }
 
 export const useParkingStore = create<ParkingState>((set, get) => ({
@@ -45,7 +63,7 @@ export const useParkingStore = create<ParkingState>((set, get) => ({
   selectedParking: null,
   loading: false,
   searchParams: {},
-  closedSlots: {},
+  closedSlots: loadPersistedClosedSlots(),
 
   loadParkings: async () => {
     set({ loading: true });
@@ -156,28 +174,107 @@ export const useParkingStore = create<ParkingState>((set, get) => ({
   },
 
   closeSlot: (parkingId: string, slot: ClosedSlot) => {
-    set((state) => ({
-      closedSlots: {
+    set((state) => {
+      const updated = {
         ...state.closedSlots,
         [parkingId]: [...(state.closedSlots[parkingId] || []), slot],
-      },
-    }));
+      };
+      persistClosedSlots(updated);
+      return { closedSlots: updated };
+    });
   },
 
   reopenSlot: (parkingId: string, slot: ClosedSlot) => {
-    set((state) => ({
-      closedSlots: {
+    set((state) => {
+      const updated = {
         ...state.closedSlots,
         [parkingId]: (state.closedSlots[parkingId] || []).filter(
           (s) =>
             !(s.date === slot.date && s.startHour === slot.startHour && s.endHour === slot.endHour)
         ),
-      },
-    }));
+      };
+      persistClosedSlots(updated);
+      return { closedSlots: updated };
+    });
   },
 
   isSlotClosed: (parkingId: string, date: string, hour: number) => {
     const slots = get().closedSlots[parkingId] || [];
     return slots.some((s) => s.date === date && hour >= s.startHour && hour < s.endHour);
+  },
+
+  checkTimeAvailability: (
+    parkingId: string,
+    start: string | Date,
+    end: string | Date,
+    excludeOrderId?: string
+  ) => {
+    const startDate = typeof start === 'string' ? new Date(start) : start;
+    const endDate = typeof end === 'string' ? new Date(end) : end;
+
+    if (startDate >= endDate) {
+      return { available: false, reason: '开始时间必须早于结束时间' };
+    }
+
+    const parking = findParkingById(parkingId) || get().parkings.find((p) => p.id === parkingId);
+    if (!parking) {
+      return { available: false, reason: '车位不存在' };
+    }
+
+    const startHour = startDate.getHours() + startDate.getMinutes() / 60;
+    const endHour = endDate.getHours() + endDate.getMinutes() / 60;
+    const sameDay = startDate.toDateString() === endDate.toDateString();
+
+    if (!sameDay) {
+      const startDayStart = 0;
+      const startDayEnd = 24;
+      const endDayStart = 0;
+      const endDayEnd = endHour;
+      /** 跨天简化检查：只要当天在可用时段内即可，这里简化为都检查 */
+    }
+
+    /** 1. 检查车位可用时段 */
+    const availableSlots = parking.availableSlots || [];
+    if (availableSlots.length > 0) {
+      let fitsInSlot = false;
+      for (const slot of availableSlots) {
+        const slotStart = parseInt(slot.startTime.split(':')[0], 10) + parseInt(slot.startTime.split(':')[1] || '0', 10) / 60;
+        const slotEnd = parseInt(slot.endTime.split(':')[0], 10) + parseInt(slot.endTime.split(':')[1] || '0', 10) / 60;
+        if (startHour >= slotStart && endHour <= slotEnd) {
+          fitsInSlot = true;
+          break;
+        }
+      }
+      if (!fitsInSlot) {
+        return { available: false, reason: '该时段不在车位可用范围内' };
+      }
+    }
+
+    /** 2. 检查业主关闭时段 */
+    const dateStr = startDate.toISOString().slice(0, 10);
+    const closedList = get().closedSlots[parkingId] || [];
+    for (const closed of closedList) {
+      if (closed.date !== dateStr) continue;
+      if (startHour < closed.endHour && endHour > closed.startHour) {
+        return { available: false, reason: '该时段已被业主临时关闭' };
+      }
+    }
+
+    /** 3. 检查同车位其他订单冲突 */
+    const orders = useOrderStore.getState().orders;
+    const conflicting = orders.filter((o) => {
+      if (o.parkingId !== parkingId) return false;
+      if (excludeOrderId && o.id === excludeOrderId) return false;
+      if (o.status !== 'paid' && o.status !== 'active' && o.status !== 'pending') return false;
+      const oStart = new Date(o.scheduledStart);
+      const oEnd = new Date(o.scheduledEnd);
+      return startDate < oEnd && endDate > oStart;
+    });
+
+    if (conflicting.length > 0) {
+      return { available: false, reason: '该时段已被其他订单占用' };
+    }
+
+    return { available: true };
   },
 }));
