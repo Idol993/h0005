@@ -103,6 +103,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const savedUser = getStorage<User | null>('auth_user', null);
     if (token && savedUser) {
       const freshUser = findUserById(savedUser.id) || savedUser;
+      if (freshUser.banned) {
+        removeToken();
+        removeStorage('auth_user');
+        set({ token: '', user: null });
+        return;
+      }
       set({ token, user: freshUser });
     }
   },

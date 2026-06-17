@@ -32,19 +32,19 @@ const menuItems = [
     key: 'parking',
     label: '车位管理',
     icon: MapPin,
-    path: '/owner/parking',
+    path: '/owner/parkings',
   },
   {
     key: 'publish',
     label: '发布车位',
     icon: PlusCircle,
-    path: '/owner/publish',
+    path: '/owner/parking/publish',
   },
   {
     key: 'records',
     label: '出租记录',
     icon: Receipt,
-    path: '/owner/records',
+    path: '/owner/orders',
   },
   {
     key: 'finance',

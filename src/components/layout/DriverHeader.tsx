@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   Package,
+  ClipboardList,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
@@ -66,7 +67,7 @@ export function DriverHeader() {
           {/* 进行中订单入口 */}
           <button
             className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors"
-            onClick={() => navigate('/driver/orders?status=active')}
+            onClick={() => navigate('/order/active')}
             title="进行中订单"
           >
             <Package className="w-5 h-5 text-slate-600" />
@@ -77,9 +78,9 @@ export function DriverHeader() {
 
           {/* 消息通知 */}
           <button
-            className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors"
-            onClick={() => navigate('/driver/messages')}
-            title="消息通知"
+            className="relative p-2 rounded-lg text-slate-400 cursor-not-allowed transition-colors"
+            title="消息通知（即将上线）"
+            disabled
           >
             <Bell className="w-5 h-5 text-slate-600" />
             {hasNewMessage && (
@@ -130,7 +131,7 @@ export function DriverHeader() {
                   <button
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                     onClick={() => {
-                      navigate('/driver/orders');
+                      navigate('/orders');
                       setUserMenuOpen(false);
                     }}
                   >
@@ -138,14 +139,12 @@ export function DriverHeader() {
                     我的订单
                   </button>
                   <button
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                    onClick={() => {
-                      navigate('/driver/settings');
-                      setUserMenuOpen(false);
-                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-400 cursor-not-allowed"
+                    disabled
+                    title="即将上线"
                   >
                     <Settings className="w-4 h-4" />
-                    账号设置
+                    账号设置（即将上线）
                   </button>
                 </div>
 
@@ -197,29 +196,32 @@ export function DriverHeader() {
             <button
               className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 w-full transition-colors"
               onClick={() => {
-                navigate('/driver/orders?status=active');
+                navigate('/order/active');
                 setMobileMenuOpen(false);
               }}
             >
               <Package className="w-5 h-5 text-brand-500" />
               <span className="flex-1 text-left">进行中订单</span>
-              <span className="w-5 h-5 bg-accent-500 text-white text-xs rounded-full flex items-center justify-center">
-                1
-              </span>
             </button>
 
             <button
               className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 w-full transition-colors"
               onClick={() => {
-                navigate('/driver/messages');
+                navigate('/orders');
                 setMobileMenuOpen(false);
               }}
             >
-              <Bell className="w-5 h-5 text-brand-500" />
-              <span className="flex-1 text-left">消息通知</span>
-              {hasNewMessage && (
-                <span className="w-2 h-2 bg-red-500 rounded-full" />
-              )}
+              <ClipboardList className="w-5 h-5 text-brand-500" />
+              <span className="flex-1 text-left">我的订单</span>
+            </button>
+
+            <button
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 cursor-not-allowed w-full transition-colors"
+              disabled
+              title="即将上线"
+            >
+              <Bell className="w-5 h-5" />
+              <span className="flex-1 text-left">消息通知（即将上线）</span>
             </button>
 
             <button

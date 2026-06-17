@@ -9,7 +9,22 @@ import {
 import { generateId } from '../utils/format';
 import { useAuthStore } from './authStore';
 import { useParkingStore } from './parkingStore';
-import { calculateHours, calculateOvertime } from '../utils/time';
+import { calculateHours, calculateOvertimeFee } from '../utils/time';
+import { getStorage, setStorage } from '../utils/storage';
+
+const STORAGE_KEY = 'parking_app_orders';
+
+function loadPersistedOrders(): Order[] {
+  const persisted = getStorage<Order[]>(STORAGE_KEY, []);
+  if (persisted.length > 0) {
+    return persisted;
+  }
+  return [...initialOrders];
+}
+
+function persistOrders(orders: Order[]) {
+  setStorage(STORAGE_KEY, orders);
+}
 
 interface CreateOrderParams {
   parkingId: string;
@@ -36,7 +51,7 @@ interface OrderState {
 }
 
 export const useOrderStore = create<OrderState>((set, get) => ({
-  orders: [...initialOrders],
+  orders: loadPersistedOrders(),
   activeOrder: null,
   loading: false,
 
@@ -45,7 +60,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     const user = useAuthStore.getState().user;
-    let ordersList = [...initialOrders];
+    const ordersList = loadPersistedOrders();
     let active: Order | null = null;
 
     if (user) {
@@ -93,10 +108,11 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
 
-    set((state) => ({
-      orders: [newOrder, ...state.orders],
-      loading: false,
-    }));
+    set((state) => {
+      const updated = [newOrder, ...state.orders];
+      persistOrders(updated);
+      return { orders: updated, loading: false };
+    });
 
     return newOrder;
   },
@@ -105,25 +121,29 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set({ loading: true });
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    set((state) => ({
-      orders: state.orders.map((o) =>
+    set((state) => {
+      const updated = state.orders.map((o) =>
         o.id === orderId
           ? { ...o, status: 'paid' as OrderStatus, paymentTime: new Date().toISOString() }
           : o
-      ),
-      activeOrder:
-        state.activeOrder?.id === orderId
+      );
+      persistOrders(updated);
+      const newActive = updated.find(o => o.id === orderId && (o.status === 'paid' || o.status === 'active')) || state.activeOrder;
+      return {
+        orders: updated,
+        activeOrder: state.activeOrder?.id === orderId
           ? { ...state.activeOrder, status: 'paid' as OrderStatus, paymentTime: new Date().toISOString() }
-          : state.activeOrder,
-      loading: false,
-    }));
+          : newActive,
+        loading: false,
+      };
+    });
   },
 
   enterParking: async (orderId: string, code: string) => {
     set({ loading: true });
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    const order = findOrderById(orderId) || get().orders.find((o) => o.id === orderId);
+    const order = get().orders.find((o) => o.id === orderId);
     if (!order || order.status !== 'paid') {
       set({ loading: false });
       return false;
@@ -139,6 +159,7 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       const updated = state.orders.map((o) =>
         o.id === orderId ? { ...o, status: 'active' as OrderStatus, actualStart } : o
       );
+      persistOrders(updated);
       const activeUpdated = updated.find((o) => o.id === orderId) || null;
       return { orders: updated, activeOrder: activeUpdated, loading: false };
     });
@@ -158,14 +179,15 @@ export const useOrderStore = create<OrderState>((set, get) => ({
 
     const actualEnd = new Date().toISOString();
     const actualHours = calculateHours(order.scheduledStart, actualEnd);
-    const overtimeHours = calculateOvertime(order.scheduledEnd, actualEnd);
     const parking = useParkingStore.getState().getParkingById(order.parkingId);
     const hourlyRate = parking?.hourlyRate || 10;
-    const overtimeAmount = Math.round(overtimeHours * hourlyRate * 100) / 100;
+    const overtimeResult = calculateOvertimeFee(order.scheduledEnd, actualEnd, hourlyRate);
+    const overtimeAmount = overtimeResult.overtimeFee;
+    const overtimeHours = overtimeResult.overtimeHours;
     const totalAmount = order.baseAmount + overtimeAmount;
 
-    set((state) => ({
-      orders: state.orders.map((o) =>
+    set((state) => {
+      const updated = state.orders.map((o) =>
         o.id === orderId
           ? {
               ...o,
@@ -177,22 +199,27 @@ export const useOrderStore = create<OrderState>((set, get) => ({
               totalAmount,
             }
           : o
-      ),
-      activeOrder: state.activeOrder?.id === orderId ? null : state.activeOrder,
-      loading: false,
-    }));
+      );
+      persistOrders(updated);
+      return {
+        orders: updated,
+        activeOrder: state.activeOrder?.id === orderId ? null : state.activeOrder,
+        loading: false,
+      };
+    });
   },
 
   reviewOrder: async (orderId: string, rating: number, review?: string) => {
     set({ loading: true });
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    set((state) => ({
-      orders: state.orders.map((o) =>
+    set((state) => {
+      const updated = state.orders.map((o) =>
         o.id === orderId ? { ...o, rating, review } : o
-      ),
-      loading: false,
-    }));
+      );
+      persistOrders(updated);
+      return { orders: updated, loading: false };
+    });
   },
 
   submitRating: async (orderId: string, rating: number, review?: string) => {
@@ -203,36 +230,38 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     set({ loading: true });
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    set((state) => ({
-      orders: state.orders.map((o) =>
+    set((state) => {
+      const updated = state.orders.map((o) =>
         o.id === orderId
           ? { ...o, status: 'disputed' as OrderStatus, disputeReason: reason }
           : o
-      ),
-      loading: false,
-    }));
+      );
+      persistOrders(updated);
+      return { orders: updated, loading: false };
+    });
   },
 
   cancelOrder: async (orderId: string) => {
     set({ loading: true });
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    set((state) => ({
-      orders: state.orders.map((o) =>
+    set((state) => {
+      const updated = state.orders.map((o) =>
         o.id === orderId ? { ...o, status: 'cancelled' as OrderStatus } : o
-      ),
-      activeOrder:
-        state.activeOrder?.id === orderId ? null : state.activeOrder,
-      loading: false,
-    }));
+      );
+      persistOrders(updated);
+      return {
+        orders: updated,
+        activeOrder: state.activeOrder?.id === orderId ? null : state.activeOrder,
+        loading: false,
+      };
+    });
   },
 
   getDriverOrders: (driverId?: string) => {
     const user = useAuthStore.getState().user;
     const id = driverId || user?.id;
     if (!id) return [];
-    const fromMock = findOrdersByDriver(id);
-    if (fromMock.length > 0) return fromMock;
     return get()
       .orders.filter((o) => o.driverId === id)
       .sort(
@@ -245,8 +274,6 @@ export const useOrderStore = create<OrderState>((set, get) => ({
     const user = useAuthStore.getState().user;
     const id = ownerId || user?.id;
     if (!id) return [];
-    const fromMock = findOrdersByOwner(id);
-    if (fromMock.length > 0) return fromMock;
     return get()
       .orders.filter((o) => o.ownerId === id)
       .sort(

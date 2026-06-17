@@ -21,6 +21,58 @@ export function calculateOvertime(
   return Math.round(diff * 10) / 10;
 }
 
+export interface OvertimeFeeResult {
+  overtimeHours: number;
+  overtimeFee: number;
+  level: 'normal' | 'warning' | 'severe';
+  normalHours: number;
+  penaltyHours: number;
+  normalFee: number;
+  penaltyFee: number;
+}
+
+export function calculateOvertimeFee(
+  scheduledEnd: Date | string | number,
+  currentTime: Date | string | number,
+  hourlyRate: number
+): OvertimeFeeResult {
+  const overtimeHours = calculateOvertime(scheduledEnd, currentTime);
+  if (overtimeHours <= 0) {
+    return {
+      overtimeHours: 0,
+      overtimeFee: 0,
+      level: 'normal',
+      normalHours: 0,
+      penaltyHours: 0,
+      normalFee: 0,
+      penaltyFee: 0,
+    };
+  }
+
+  const normalHours = Math.min(overtimeHours, 2);
+  const penaltyHours = Math.max(0, overtimeHours - 2);
+  const normalFee = Math.round(normalHours * hourlyRate * 100) / 100;
+  const penaltyFee = Math.round(penaltyHours * hourlyRate * 1.5 * 100) / 100;
+  const overtimeFee = Math.round((normalFee + penaltyFee) * 100) / 100;
+
+  let level: OvertimeFeeResult['level'] = 'normal';
+  if (overtimeHours >= 4) {
+    level = 'severe';
+  } else if (overtimeHours > 0) {
+    level = 'warning';
+  }
+
+  return {
+    overtimeHours,
+    overtimeFee,
+    level,
+    normalHours,
+    penaltyHours,
+    normalFee,
+    penaltyFee,
+  };
+}
+
 export function isSameDay(d1: Date | string | number, d2: Date | string | number): boolean {
   const a = new Date(d1);
   const b = new Date(d2);

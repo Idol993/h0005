@@ -27,7 +27,7 @@ import { useOrderStore } from '@/store/orderStore';
 import { useParkingStore } from '@/store/parkingStore';
 import { useAuthStore } from '@/store/authStore';
 import { formatCurrency, formatDateTime, formatDuration } from '@/utils/format';
-import { calculateHours, calculateOvertime } from '@/utils/time';
+import { calculateHours, calculateOvertimeFee } from '@/utils/time';
 import { cn } from '@/lib/utils';
 import type { Order } from '@/types';
 
@@ -37,7 +37,8 @@ import type { Order } from '@/types';
  */
 export default function ActiveOrderPage() {
   const navigate = useNavigate();
-  const { activeOrder, orders, exitParking, loading, loadOrders, getDriverOrders } = useOrderStore();
+  const { activeOrder, orders, exitParking, enterParking, loading, loadOrders, getDriverOrders } = useOrderStore();
+  const orderStoreGet = useOrderStore.getState;
   const { getParkingById } = useParkingStore();
   const { user } = useAuthStore();
 
@@ -47,6 +48,9 @@ export default function ActiveOrderPage() {
   const [now, setNow] = useState(new Date());
   /** 扫码开门弹窗 */
   const [showScanModal, setShowScanModal] = useState(false);
+  /** 扫码入场状态 */
+  const [scanStatus, setScanStatus] = useState<'scanning' | 'success' | 'error'>('scanning');
+  const [scanErrorMsg, setScanErrorMsg] = useState('');
 
   /** 定时器引用 */
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -112,10 +116,11 @@ export default function ActiveOrderPage() {
     const estimatedCost = Math.round(parkedHours * hourlyRate * 100) / 100;
 
     /** 超时判断 */
-    const overtimeHours = calculateOvertime(scheduledEnd, now);
-    const isOvertime = overtimeHours > 0;
-    const overtimeAmount = Math.round(overtimeHours * hourlyRate * 100) / 100;
-    const overtimeLevel = overtimeHours >= 4 ? 'danger' : overtimeHours > 0 ? 'warning' : 'normal';
+    const overtimeResult = calculateOvertimeFee(scheduledEnd, now, hourlyRate);
+    const isOvertime = overtimeResult.overtimeHours > 0;
+    const overtimeHours = overtimeResult.overtimeHours;
+    const overtimeAmount = overtimeResult.overtimeFee;
+    const overtimeLevel = overtimeResult.level;
 
     /** 预约结束倒计时 */
     const toEnd = scheduledEnd.getTime() - now.getTime();
@@ -132,6 +137,7 @@ export default function ActiveOrderPage() {
       overtimeLevel,
       toEndSeconds,
       hourlyRate,
+      overtimeResult,
     };
   }, [order, now, getParkingById]);
 
@@ -361,7 +367,7 @@ export default function ActiveOrderPage() {
                   <div
                     className={cn(
                       'p-4 rounded-2xl mb-6 animate-pulse-soft',
-                      timingInfo.overtimeLevel === 'danger'
+                      timingInfo.overtimeLevel === 'severe'
                         ? 'bg-gradient-to-r from-red-50 to-red-100/50 border-2 border-red-200'
                         : 'bg-gradient-to-r from-amber-50 to-amber-100/50 border-2 border-amber-200'
                     )}
@@ -371,30 +377,35 @@ export default function ActiveOrderPage() {
                         <AlertTriangle
                           className={cn(
                             'w-6 h-6 mt-0.5 shrink-0',
-                            timingInfo.overtimeLevel === 'danger' ? 'text-red-500' : 'text-amber-500'
+                            timingInfo.overtimeLevel === 'severe' ? 'text-red-500' : 'text-amber-500'
                           )}
                         />
                         <div>
                           <p
                             className={cn(
                               'font-semibold',
-                              timingInfo.overtimeLevel === 'danger' ? 'text-red-700' : 'text-amber-700'
+                              timingInfo.overtimeLevel === 'severe' ? 'text-red-700' : 'text-amber-700'
                             )}
                           >
-                            {timingInfo.overtimeLevel === 'danger'
-                              ? '⚠️ 严重超时警告'
-                              : '⏰ 已超时提醒'
+                            {timingInfo.overtimeLevel === 'severe'
+                              ? '严重超时警告'
+                              : '已超时提醒'
                             }
                           </p>
                           <p
                             className={cn(
                               'text-sm mt-1',
-                              timingInfo.overtimeLevel === 'danger' ? 'text-red-600' : 'text-amber-600'
+                              timingInfo.overtimeLevel === 'severe' ? 'text-red-600' : 'text-amber-600'
                             )}
                           >
-                            已超时 {formatDuration(timingInfo.overtimeHours)}，超时费用
-                            {formatCurrency(timingInfo.overtimeAmount)}
-                            {timingInfo.overtimeLevel === 'danger' && '，建议尽快离场避免更多费用'}
+                            已超时 {formatDuration(timingInfo.overtimeHours)}
+                            {timingInfo.overtimeResult.normalHours > 0 && (
+                              <>（前2小时按正常费率 {formatCurrency(timingInfo.overtimeResult.normalFee)}）</>
+                            )}
+                            {timingInfo.overtimeResult.penaltyHours > 0 && (
+                              <>（超出2小时部分按1.5倍费率 {formatCurrency(timingInfo.overtimeResult.penaltyFee)}）</>
+                            )}
+                            {timingInfo.overtimeLevel === 'severe' && '，已超4小时，建议立即离场！'}
                           </p>
                         </div>
                       </div>
@@ -402,7 +413,7 @@ export default function ActiveOrderPage() {
                         <p
                           className={cn(
                             'text-sm',
-                            timingInfo.overtimeLevel === 'danger' ? 'text-red-600' : 'text-amber-600'
+                            timingInfo.overtimeLevel === 'severe' ? 'text-red-600' : 'text-amber-600'
                           )}
                         >
                           超时费用
@@ -410,7 +421,7 @@ export default function ActiveOrderPage() {
                         <p
                           className={cn(
                             'text-2xl font-bold tabular-nums',
-                            timingInfo.overtimeLevel === 'danger' ? 'text-red-600' : 'text-amber-600'
+                            timingInfo.overtimeLevel === 'severe' ? 'text-red-600' : 'text-amber-600'
                           )}
                         >
                           +{formatCurrency(timingInfo.overtimeAmount)}
@@ -461,17 +472,16 @@ export default function ActiveOrderPage() {
                 </h2>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* 一键开门 */}
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    onClick={() => setShowScanModal(true)}
-                    leftIcon={<KeyRound className="w-5 h-5" />}
-                  >
-                    扫码开门
-                  </Button>
-
-                  {/* 导航到车位 */}
+                  {order.status === 'paid' && (
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      onClick={() => setShowScanModal(true)}
+                      leftIcon={<KeyRound className="w-5 h-5" />}
+                    >
+                      扫码开门
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="lg"
@@ -480,18 +490,18 @@ export default function ActiveOrderPage() {
                   >
                     导航到车位
                   </Button>
-
-                  {/* 确认离场 */}
-                  <Button
-                    variant="accent"
-                    size="lg"
-                    className="sm:col-span-2"
-                    loading={loading}
-                    onClick={handleExit}
-                    leftIcon={<CheckCircle className="w-5 h-5" />}
-                  >
-                    确认离场 · 结算费用
-                  </Button>
+                  {order.status === 'active' && (
+                    <Button
+                      variant="accent"
+                      size="lg"
+                      className="sm:col-span-2"
+                      loading={loading}
+                      onClick={handleExit}
+                      leftIcon={<CheckCircle className="w-5 h-5" />}
+                    >
+                      确认离场 · 结算费用
+                    </Button>
+                  )}
                 </div>
 
                 {/* 温馨提示 */}
@@ -612,33 +622,91 @@ export default function ActiveOrderPage() {
         </div>
 
         {/* 扫码开门弹窗 */}
-        {showScanModal && (
+        {showScanModal && order && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
             <Card radius="3xl" className="w-full max-w-md mx-auto animate-fade-in-up">
               <div className="text-center">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-brand flex items-center justify-center mx-auto mb-4">
-                  <Camera className="w-8 h-8 text-white" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-2">扫码开门</h3>
-                <p className="text-sm text-slate-500 mb-6">
-                  将摄像头对准闸机二维码，或对准闸机上的二维码扫描区
-                </p>
+                {scanStatus === 'success' ? (
+                  <>
+                    <div className="w-16 h-16 rounded-2xl bg-success-500 flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle className="w-8 h-8 text-white" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900 mb-2">入场成功</h3>
+                    <p className="text-sm text-slate-500 mb-6">
+                      闸机已开启，系统开始计时，请尽快驶入车位
+                    </p>
+                    <Button variant="primary" size="lg" onClick={() => {
+                      setShowScanModal(false);
+                      setScanStatus('scanning');
+                    }}>
+                      确认
+                    </Button>
+                  </>
+                ) : scanStatus === 'error' ? (
+                  <>
+                    <div className="w-16 h-16 rounded-2xl bg-danger-500 flex items-center justify-center mx-auto mb-4">
+                      <AlertCircle className="w-8 h-8 text-white" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900 mb-2">入场码校验失败</h3>
+                    <p className="text-sm text-danger-500 mb-6">{scanErrorMsg}</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button variant="ghost" size="lg" onClick={() => {
+                        setShowScanModal(false);
+                        setScanStatus('scanning');
+                      }}>
+                        关闭
+                      </Button>
+                      <Button variant="primary" size="lg" onClick={() => setScanStatus('scanning')}>
+                        重新扫码
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-brand flex items-center justify-center mx-auto mb-4">
+                      <Camera className="w-8 h-8 text-white" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900 mb-2">扫码开门</h3>
+                    <p className="text-sm text-slate-500 mb-6">
+                      将摄像头对准闸机二维码，或对准闸机上的二维码扫描区
+                    </p>
 
-                <div className="aspect-square max-w-xs mx-auto rounded-2xl bg-slate-100 flex items-center justify-center mb-6 relative overflow-hidden">
-                  {/* 模拟扫描动画 */}
-                  <div className="absolute inset-0 border-4 border-brand-500/50 rounded-2xl m-8 animate-pulse-soft" />
-                  <div className="absolute left-8 right-8 top-1/2 h-0.5 bg-accent-500 animate-bounce-soft" />
-                  <Camera className="w-16 h-16 text-slate-400" />
-                </div>
+                    <div className="aspect-square max-w-xs mx-auto rounded-2xl bg-slate-100 flex items-center justify-center mb-6 relative overflow-hidden">
+                      <div className="absolute inset-0 border-4 border-brand-500/50 rounded-2xl m-8 animate-pulse-soft" />
+                      <div className="absolute left-8 right-8 top-1/2 h-0.5 bg-accent-500 animate-bounce-soft" />
+                      <Camera className="w-16 h-16 text-slate-400" />
+                    </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <Button variant="ghost" size="lg" onClick={() => setShowScanModal(false)}>
-                    取消
-                  </Button>
-                  <Button variant="primary" size="lg" leftIcon={<CheckCircle className="w-5 h-5" />}>
-                    开门成功
-                  </Button>
-                </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button variant="ghost" size="lg" onClick={() => {
+                        setShowScanModal(false);
+                        setScanStatus('scanning');
+                      }}>
+                        取消
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="lg"
+                        leftIcon={<CheckCircle className="w-5 h-5" />}
+                        loading={loading}
+                        onClick={async () => {
+                          if (!order) return;
+                          const success = await enterParking(order.id, order.entryCode);
+                          if (success) {
+                            setScanStatus('success');
+                            const updated = orderStoreGet().orders.find(o => o.id === order.id) || null;
+                            setOrder(updated);
+                          } else {
+                            setScanErrorMsg('入场码不匹配，请确认闸机信息后重试');
+                            setScanStatus('error');
+                          }
+                        }}
+                      >
+                        模拟扫码
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             </Card>
           </div>

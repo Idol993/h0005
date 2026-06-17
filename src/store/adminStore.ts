@@ -101,10 +101,46 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
 
+    let autoBanned = false;
+    if (params.type === 'fake_listing') {
+      const existingFakeCount = get().violations.filter(
+        (v) => v.userId === params.userId && v.type === 'fake_listing'
+      ).length;
+      if (existingFakeCount + 1 >= 3) {
+        autoBanned = true;
+        const targetUser = findUserById(params.userId);
+        if (targetUser) {
+          targetUser.banned = true;
+          targetUser.violations = existingFakeCount + 1;
+        }
+        const { useAuthStore } = await import('./authStore');
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser && currentUser.id === params.userId) {
+          useAuthStore.getState().updateUser({ banned: true, violations: existingFakeCount + 1 });
+        }
+      }
+    }
+
+    if (params.penalty === 'ban') {
+      const targetUser = findUserById(params.userId);
+      if (targetUser) {
+        targetUser.banned = true;
+      }
+      const { useAuthStore } = await import('./authStore');
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser && currentUser.id === params.userId) {
+        useAuthStore.getState().updateUser({ banned: true });
+      }
+    }
+
     set((state) => ({
       violations: [newViolation, ...state.violations],
       loading: false,
     }));
+
+    if (autoBanned) {
+      await get().toggleUserBan(params.userId, true);
+    }
 
     return newViolation;
   },
